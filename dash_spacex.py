@@ -59,41 +59,65 @@ app.layout = html.Div(children=[html.H1('Space X Launch Data',
                 ]
             )
 
+    
 def update_charts(selected_site, payload_range):
-
     low, high = payload_range
     filtered_df = spacex_df[(spacex_df['Payload Mass (kg)'] >= low) & 
                             (spacex_df['Payload Mass (kg)'] <= high)]
-
-
-    # Select data
     if selected_site == 'ALL':
-        pie_df = filtered_df[filtered_df['class'] == 1]
-        pie_fig = px.pie(pie_df,
+        site_group = filtered_df.groupby('Launch Site')['class'].agg(['sum','count']).reset_index()
+        site_group.columns = ['Launch Site', 'Success Count', 'Total Launches']
+        site_group['Success Ratio'] = site_group['Success Count']/site_group['Total Launches']
+
+    
+        pie_fig = px.pie(site_group,
                         names='Launch Site',
-                        #value='class',
+                        values='Success Count',
                         title='Total Successful Launches by Site')
-        
+
+        # customdata = pie_data[['Count', 'Ratio']].to_numpy()
+        pie_fig.update_traces(textinfo='none',
+                            customdata=site_group[['Success Count', 'Success Ratio']],
+                            texttemplate='%{customdata[0]}<br>%{customdata[1]:.2%}',
+                            hovertemplate='Launch Site: %{label}<br>Success Count: %{customdata[0]}<br>Success Ratio: %{customdata[1]:.2%}')
         
         bar_fig = px.scatter(filtered_df,
-                         x='Payload Mass (kg)', y='class',
-                         color='Launch Site',
-                         title='Payload vs Outcome for All Sites')
-        
+                             x='Payload Mass (kg)', y='class',
+                             color='Launch Site',
+                             title='Payload vs Outcome for All Sites')
         return pie_fig, bar_fig
-    
+
+
+
     else:
         filtered_df = filtered_df[filtered_df['Launch Site'] == selected_site]
-        pie_fig = px.pie(filtered_df,
-                        names = 'class',
-                        title=f'Success vs Failure for {selected_site}')
-        
-        bar_fig = px.scatter(filtered_df,
-                        x='Payload Mass (kg)',
-                        y='class',
-                        title=f'Launch Outcome by Payload Mass for {selected_site}')
+        class_counts = filtered_df['class'].value_counts()
+        total = class_counts.sum()
+        ratio = class_counts / total
 
+        pie_data = pd.DataFrame({
+            'class': class_counts.index,
+            'Count': class_counts.values,
+            'Ratio': ratio.values
+        })
+
+        pie_fig = px.pie(pie_data,
+                        names='class',
+                        values='Count',
+                        title=f'Success vs Failure for {selected_site}')
+
+        customdata = pie_data[['Count', 'Ratio']].to_numpy()
+        pie_fig.update_traces(textinfo='none',
+                            customdata=customdata,
+                            texttemplate='%{customdata[0]}<br>%{customdata[1]:.2%}',
+                            hovertemplate='Outcome: %{label}<br>Count: %{customdata[0]}<br>Ratio: %{customdata[1]:.2%}')
+
+        bar_fig = px.scatter(filtered_df,
+                             x='Payload Mass (kg)', y='class',
+                             title=f'Launch Outcome by Payload Mass for {selected_site}')
         return pie_fig, bar_fig
+
+
 
 
 # Run the app
